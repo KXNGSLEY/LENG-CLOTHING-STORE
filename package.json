@@ -1,0 +1,22 @@
+{
+  "name": "nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/datastore": "^10.0.1",
+    "@types/node": "^22.13.11",
+    "axios": "^1.13.2",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "firebase-admin": "^13.6.0",
+    "multer": "^2.0.2",
+    "node-fetch": "^3.3.2"
+  }
+}
