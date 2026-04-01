@@ -9,18 +9,38 @@ const admin = require("firebase-admin");
 const { Datastore } = require("@google-cloud/datastore");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 5000;
 
 // ─── FIREBASE & DATASTORE SETUP ──────────────────────────────────────────────
-const serviceAccount = require("./prototype-v-1-firebase-adminsdk-fbsvc-9b62f1c105.json");
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+let serviceAccount;
+
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+  // ← Production on Render (recommended)
+  try {
+    serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+  } catch (e) {
+    console.error("Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON");
+    throw e;
+  }
+} else {
+  // ← Local development (Replit, your machine, etc.)
+  serviceAccount = require("./prototype-v-1-firebase-adminsdk-fbsvc-115e00a28b.json");
+}
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+// Datastore client
 const db = new Datastore({
   projectId: serviceAccount.project_id,
   credentials: {
     client_email: serviceAccount.client_email,
-    private_key: serviceAccount.private_key
+    private_key: serviceAccount.private_key.replace(/\\n/g, '\n')
   }
 });
+
+console.log(`✅ Datastore initialized for project: ${serviceAccount.project_id}`);
 
 // ─── IMGBB API KEY ───────────────────────────────────────────────────────────
 const IMGBB_API_KEY = "5b10aa56b841e44be350b902f4f915d6";
@@ -1520,7 +1540,7 @@ app.post("/admin/available/:id", async (req, res) => {
 });
 
 // ─── START SERVER ────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`LENG is live → http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`LENG is live → http://0.0.0.0:${PORT}`);
   console.log("Ctrl+C to stop");
 });
