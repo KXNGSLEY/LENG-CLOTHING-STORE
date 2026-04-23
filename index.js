@@ -1,6 +1,3 @@
-// server.js
-// Run with: node server.js
-// Then open http://localhost:3000
 const express = require('express');
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const multer = require("multer");
@@ -15,7 +12,7 @@ const PORT = process.env.PORT || 5000;
 let serviceAccount;
 
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
-  // ← Production on Render (recommended)
+  // Big ass security issue fixed lol
   try {
     serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
   } catch (e) {
@@ -23,7 +20,7 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
     throw e;
   }
 } else {
-  // ← Local development (Replit, your machine, etc.)
+  // REMIND ME NEVER EVER TO USE THIS OUTSIDE FUCKING LOCAL MACHINE
   serviceAccount = require("./prototype-v-1-firebase-adminsdk-fbsvc-115e00a28b.json");
 }
 
@@ -52,6 +49,7 @@ function formatNaira(price) {
 
 // ─── SESSION & MULTER SETUP ──────────────────────────────────────────────────
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 app.use(session({
   secret: "leng-secret",
   resave: false,
@@ -259,6 +257,15 @@ const sharedScripts = `
   </style>
 `;
 
+// ─── CATEGORIES DEFINITION ───────────────────────────────────────────────────
+const categories = [
+  { id: "all", name: "All", emoji: "🌌" },
+  { id: "bodywear", name: "Bodywear", emoji: "👕" },
+  { id: "footwear", name: "Footwear", emoji: "👟" },
+  { id: "headwear", name: "Headwear", emoji: "🧢" },
+  { id: "wristwear", name: "Wristwear", emoji: "⌚" }
+];
+
 // ─── HOME PAGE ───────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.send(`
@@ -323,12 +330,13 @@ app.get('/', (req, res) => {
   `);
 });
 
-// ─── STORE PAGE (with Sold Out Overlay) ──────────────────────────────────────
+// ─── STORE PAGE ─────────────────────────────────
+// FIXED: Layout is now Featured → Categories → Items (no duplicate grid)
 app.get("/store", async (req, res) => {
   const query = db.createQuery("storeItems").order("createdAt", { descending: true });
   const [items] = await db.runQuery(query);
 
-  // Featured items
+  // Featured (random daily from available items)
   let featuredItems = [];
   const availableItems = items.filter(item => item.soldOut !== true);
   if (availableItems.length >= 3) {
@@ -386,16 +394,17 @@ app.get("/store", async (req, res) => {
     `;
   }
 
-  // Regular items
+  // Regular items grid (with data-category for JS filtering)
   let itemsHtml = "";
   items.forEach(item => {
     const entityKey = item[Datastore.KEY];
     const itemId = entityKey.id || entityKey.name;
     const firstImage = item.imageUrls?.[0] || item.imageUrl || 'https://via.placeholder.com/400?text=No+Image';
     const isSoldOut = item.soldOut === true;
+    const cat = item.category || "uncategorized";
 
     itemsHtml += `
-      <div class="card ${isSoldOut ? 'sold-out-card' : ''}" style="position:relative;">
+      <div class="card ${isSoldOut ? 'sold-out-card' : ''}" data-category="${cat}" style="position:relative;">
         <a href="/product/${itemId}" class="card-link">
           <img src="${firstImage}" alt="${item.description}">
           ${isSoldOut ? `<div class="sold-out-overlay"><div class="sold-out-text">SOLD OUT</div></div>` : ''}
@@ -403,6 +412,7 @@ app.get("/store", async (req, res) => {
         <div class="card-info">
           <h3>${item.description}</h3>
           <div class="price">${formatNaira(item.price)}</div>
+          ${item.category ? `<small style="opacity:0.6;">${item.category}</small>` : ''}
         </div>
         ${!isSoldOut ? `
           <button class="add-to-cart-small"
@@ -437,7 +447,16 @@ app.get("/store", async (req, res) => {
       color: #00ff50;
       text-shadow: 0 0 40px rgba(0,255,80,0.6);
     }
-    #products { padding: 4rem 5% 8rem; }
+    #store-hero p {
+      font-size: 1.3rem;
+      opacity: 0.7;
+      margin-top: 0.5rem;
+    }
+    #products {
+      padding: 4rem 5% 8rem;
+      position: relative;
+      z-index: 2;
+    }
 
     /* Sold Out Styles */
     .sold-out-card {
@@ -449,10 +468,8 @@ app.get("/store", async (req, res) => {
     }
     .sold-out-overlay {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       background: rgba(0, 255, 80, 0.75);
       display: flex;
       align-items: center;
@@ -503,8 +520,7 @@ app.get("/store", async (req, res) => {
       color: #00ff50;
       border: 1px solid rgba(0,255,80,0.4);
       font-size: 2.2rem;
-      width: 60px;
-      height: 60px;
+      width: 60px; height: 60px;
       border-radius: 50%;
       cursor: pointer;
       z-index: 10;
@@ -524,8 +540,7 @@ app.get("/store", async (req, res) => {
       padding: 1.8rem 0 0.5rem;
     }
     .carousel-dot {
-      height: 13px;
-      width: 13px;
+      height: 13px; width: 13px;
       margin: 0 9px;
       background: rgba(0,255,80,0.3);
       border-radius: 50%;
@@ -537,24 +552,84 @@ app.get("/store", async (req, res) => {
       background: #00ff50;
       transform: scale(1.4);
     }
+
+    /* Category Styles */
+    #categories {
+      padding: 2rem 5% 3rem;
+      position: relative;
+      z-index: 2;
+    }
+    .category-box {
+      cursor: pointer;
+      background: rgba(10,10,10,0.85);
+      border: 1px solid rgba(0,255,80,0.3);
+      border-radius: 16px;
+      padding: 1.5rem 2rem;
+      min-width: 160px;
+      text-align: center;
+      transition: all 0.4s;
+    }
+    .category-box:hover,
+    .category-box.active {
+      border-color: #00ff50;
+      background: rgba(0,255,80,0.08);
+      transform: translateY(-4px);
+      box-shadow: 0 0 20px rgba(0,255,80,0.2);
+    }
+    .category-box.active {
+      box-shadow: 0 0 30px rgba(0,255,80,0.35);
+    }
+
+    /* No results message */
+    #no-results {
+      display: none;
+      grid-column: 1 / -1;
+      text-align: center;
+      font-size: 1.5rem;
+      opacity: 0.7;
+      padding: 4rem 0;
+    }
   </style>
 </head>
 <body>
   ${sharedHeader}
+
+  <!-- 1. HERO -->
   <section id="store-hero">
     <h1>STORE</h1>
     <p>All drops. All edge.</p>
   </section>
+
+  <!-- 2. FEATURED -->
   ${featuredHtml}
-  <section id="products">
-    <div class="grid">
-      ${itemsHtml || '<p style="grid-column: 1 / -1; text-align: center; font-size: 1.5rem; opacity: 0.7;">No items yet — check back soon!</p>'}
+
+  <!-- 3. CATEGORIES -->
+  <section id="categories">
+    <h2 style="text-align:center; font-size:2.4rem; color:#00ff50; margin-bottom:2rem; text-shadow:0 0 20px #00ff50;">Browse by Category</h2>
+    <div style="display:flex; gap:1.2rem; flex-wrap:wrap; justify-content:center; max-width:1400px; margin:0 auto;">
+      ${categories.map(cat => `
+        <div class="category-box ${cat.id === 'all' ? 'active' : ''}"
+             onclick="filterByCategory('${cat.id}', this)">
+          <div style="font-size:3rem; margin-bottom:0.8rem;">${cat.emoji}</div>
+          <div style="font-size:1.35rem; font-weight:700; color:#e0ffe0;">${cat.name}</div>
+        </div>
+      `).join('')}
     </div>
   </section>
+
+  <!-- 4. ITEMS GRID -->
+  <section id="products">
+    <div class="grid" id="itemsGrid">
+      ${itemsHtml || '<p style="grid-column:1/-1;text-align:center;font-size:1.5rem;opacity:0.7;">No items yet — check back soon!</p>'}
+      <p id="no-results">No items in this category yet.</p>
+    </div>
+  </section>
+
   <footer>© 2026 LENG — All rights reserved.<br>.</footer>
   ${sharedScripts}
-  <!-- Featured Carousel Script -->
+
   <script>
+    // ─── CAROUSEL ────────────────────────────────────────────────────────────
     const track = document.querySelector('.carousel-track');
     if (track) {
       const slides = document.querySelectorAll('.carousel-slide');
@@ -562,11 +637,12 @@ app.get("/store", async (req, res) => {
       const nextBtn = document.querySelector('.carousel-next');
       const dots = document.querySelectorAll('.carousel-dot');
       let currentIndex = 0;
+
       function setPositionByIndex() {
-        const translate = currentIndex * -100;
-        track.style.transform = \`translateX(\${translate}%)\`;
+        track.style.transform = \`translateX(\${currentIndex * -100}%)\`;
         dots.forEach((dot, i) => dot.classList.toggle('active', i === currentIndex));
       }
+
       nextBtn?.addEventListener('click', () => {
         currentIndex = (currentIndex + 1) % slides.length;
         setPositionByIndex();
@@ -575,10 +651,12 @@ app.get("/store", async (req, res) => {
         currentIndex = (currentIndex - 1 + slides.length) % slides.length;
         setPositionByIndex();
       });
+
       let autoSlide = setInterval(() => {
         currentIndex = (currentIndex + 1) % slides.length;
         setPositionByIndex();
       }, 4800);
+
       dots.forEach((dot, i) => {
         dot.addEventListener('click', () => {
           currentIndex = i;
@@ -590,7 +668,30 @@ app.get("/store", async (req, res) => {
           }, 4800);
         });
       });
+
       setPositionByIndex();
+    }
+
+    // ─── CATEGORY FILTER ─────────────────────────────────────────────────────
+    function filterByCategory(cat, clickedEl) {
+      // Update active state on category boxes
+      document.querySelectorAll('.category-box').forEach(box => box.classList.remove('active'));
+      if (clickedEl) clickedEl.classList.add('active');
+
+      const cards = document.querySelectorAll('#itemsGrid .card');
+      let visibleCount = 0;
+
+      cards.forEach(card => {
+        const show = cat === 'all' || card.dataset.category === cat;
+        card.style.display = show ? 'block' : 'none';
+        if (show) visibleCount++;
+      });
+
+      // Show/hide no-results message
+      document.getElementById('no-results').style.display = visibleCount === 0 ? 'block' : 'none';
+
+      // Scroll smoothly to items grid
+      document.getElementById('products').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   </script>
 </body>
@@ -1306,7 +1407,7 @@ app.get("/cart", (req, res) => {
 </html>
   `);
 });
-
+//(admin panel)
 app.get("/admin-panel", async (req, res) => {
   if (!req.session.authenticated) return res.redirect("/admin");
 
@@ -1332,6 +1433,15 @@ app.get("/admin-panel", async (req, res) => {
             </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 0.8rem; min-width: 160px;">
+          <!-- CATEGORY SELECT -->
+            <select onchange="updateCategory('${itemId}', this.value)"
+                    style="padding:0.5rem; border-radius:8px; background:#111; color:#00ff50; border:1px solid rgba(0,255,80,0.3);">
+              ${categories.map(cat => `
+                <option value="${cat.id}" ${item.category === cat.id ? 'selected' : ''}>
+                  ${cat.emoji} ${cat.name}
+                </option>
+              `).join('')}
+            </select>
             ${isSoldOut ? 
               `<button onclick="markAsAvailable('${itemId}')" style="background:#00cc44;color:#000;padding:0.7rem 1.2rem;border:none;border-radius:50px;cursor:pointer;font-weight:bold;">✓ Mark Available</button>` 
               : 
@@ -1373,23 +1483,31 @@ app.get("/admin-panel", async (req, res) => {
   </style>
 </head>
 <body>
-  ${sharedHeader}
-  <main>
-    <div class="box">
-      <h2>UPLOAD NEW ITEM</h2>
-      <form method="POST" action="/admin/upload" enctype="multipart/form-data">
-        <input type="file" name="images" accept="image/*" multiple />
-        <input name="price" type="number" step="0.01" placeholder="Price in Naira (e.g. 45000)" required />
-        <textarea name="description" placeholder="Item description" required></textarea>
-        <button type="submit">Upload to Store</button>
-      </form>
-    </div>
-    <div class="box">
-      <h2>MANAGE STORE ITEMS (${items.length})</h2>
-      ${itemsHtml || '<p style="text-align:center; padding: 3rem; opacity:0.6;">No items in store yet.</p>'}
-    </div>
-  </main>
-  ${sharedScripts}
+ ${sharedHeader}
+ <main>
+   <div class="box">
+     <h2>UPLOAD NEW ITEM</h2>
+     <form method="POST" action="/admin/upload" enctype="multipart/form-data">
+       <input type="file" name="images" accept="image/*" multiple required />
+       <input name="price" type="number" step="0.01" placeholder="Price in Naira" required />
+
+       <!-- NEW: Category Selection -->
+       <select name="category" required>
+         <option value="">Select Category</option>
+         ${categories.slice(1).map(cat => `<option value="${cat.id}">${cat.emoji} ${cat.name}</option>`).join('')}
+       </select>
+
+       <textarea name="description" placeholder="Item description" required></textarea>
+       <button type="submit">Upload to Store</button>
+     </form>
+   </div>
+
+   <div class="box">
+     <h2>MANAGE STORE ITEMS (${items.length})</h2>
+     ${itemsHtml || '<p>No items yet.</p>'}
+   </div>
+ </main>
+ ${sharedScripts}
   <script>
     function deleteItem(itemId) {
       if (confirm("⚠️ Are you sure you want to permanently delete this item?")) {
@@ -1414,6 +1532,19 @@ app.get("/admin-panel", async (req, res) => {
           .catch(() => alert("Connection error"));
       }
     }
+    
+    function updateCategory(itemId, category) {
+      fetch('/admin/update-category/' + itemId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error();
+        // optional visual feedback
+      })
+      .catch(() => alert("Failed to update category"));
+    }
   </script>
 </body>
 </html>
@@ -1427,6 +1558,7 @@ app.post("/admin/upload", upload.array("images", 5), async (req, res) => {
   const files = req.files;
   const price = req.body.price;
   const description = req.body.description;
+  const category = req.body.category || "uncategorized";
 
   if (!files || files.length === 0) {
     return res.send("No images uploaded. <a href='/admin-panel'>Back</a>");
@@ -1454,6 +1586,7 @@ app.post("/admin/upload", upload.array("images", 5), async (req, res) => {
       imageUrls,
       price: parseFloat(price),
       description,
+      category,                    // ← Saved here
       ratings: [],
       comments: [],
       createdAt: new Date(),
@@ -1532,6 +1665,33 @@ app.post("/admin/available/:id", async (req, res) => {
     if (!item) return res.status(404).send("Item not found");
 
     await db.update({ key, data: { ...item, soldOut: false } });
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Update failed");
+  }
+});
+
+// UPDATE CATEGORY
+app.post("/admin/update-category/:id", async (req, res) => {
+  if (!req.session.authenticated) return res.status(401).send("Unauthorized");
+
+  const id = req.params.id;
+  const { category } = req.body;
+
+  const key = isNaN(Number(id)) 
+    ? db.key(["storeItems", id]) 
+    : db.key(["storeItems", Number(id)]);
+
+  try {
+    const [item] = await db.get(key);
+    if (!item) return res.status(404).send("Item not found");
+
+    await db.update({
+      key,
+      data: { ...item, category }
+    });
+
     res.sendStatus(200);
   } catch (err) {
     console.error(err);
